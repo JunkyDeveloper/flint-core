@@ -15,7 +15,7 @@ pub struct Index {
 }
 
 impl Index {
-    pub const INDEX_NAME: &'static str = "./.cache/index.json";
+    pub const INDEX_NAME: &'static str = ".cache/index.json";
     pub const DEFAULT_TAG: &'static str = "default";
     const TEST_PATH: &'static str = "./test";
 
