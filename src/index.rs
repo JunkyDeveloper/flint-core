@@ -54,10 +54,6 @@ impl Index {
 
     /// Creates an index other all files
     ///
-    /// # Arguments
-    ///
-    /// * `path`: the path there all test files are located or sub folder which should be indexed
-    ///
     /// returns: Result<Index, Error>
     ///
     /// # Environment Variables
@@ -81,19 +77,15 @@ impl Index {
             let file = File::open(i.clone())?;
             let reader = BufReader::new(file);
             let test: TestSpec = serde_json::from_reader(reader)?;
-            for tag in &test.tags {
-                if let Some(vec) = index_map.get_mut(tag) {
-                    vec.push(i.to_string_lossy().parse()?)
-                } else {
-                    index_map.insert(tag.clone(), vec![i.to_string_lossy().parse()?]);
-                }
-            }
+            // Add test to all tags
             for tag in &test.tags {
                 index_map
                     .entry(tag.clone())
                     .or_default()
                     .push(i.to_string_lossy().parse()?);
             }
+
+            // add test to default tag if no tag specified
             if test.tags.is_empty() {
                 index_map
                     .entry(Index::get_default_tag().to_string())
@@ -101,6 +93,8 @@ impl Index {
                     .push(i.to_string_lossy().parse()?);
             }
         }
+
+        // write Index
         let index = Index::new(hash, &index_map);
         let index_string = to_string_pretty(&index)?;
         let name = Index::get_index_name();
@@ -153,13 +147,19 @@ impl Index {
         if Path::new(&Index::get_index_name()).exists() {
             let file = File::open(Index::get_index_name())?;
             let reader = BufReader::new(file);
+
+            // get index
             index = serde_json::from_reader(reader)?;
+
+            // verify the index
             if let Ok(vec) = TestLoader::collect_all_test_files(Path::new(&Index::get_test_path()))
                 && index.validate(get_hash(&vec))
             {
                 valid_index = true;
             }
         }
+
+        // if not valid recreate index
         if !valid_index {
             // Index does not exists or isn't valid, so need to build the index first
             index = Index::generate_index()?;
@@ -168,6 +168,7 @@ impl Index {
         for (k, v) in &index.index {
             if scope.contains(k) {
                 for path in v {
+                    // would load the same test more than once if the test will be in more scopes
                     if !test_paths.contains(&PathBuf::from(path)) {
                         test_paths.push(PathBuf::from(path));
                     }
