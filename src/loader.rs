@@ -1,5 +1,6 @@
 use anyhow::Result;
 use std::path::{Path, PathBuf};
+use crate::index::Index;
 
 /// Test file loader for discovering test files in the filesystem
 pub struct TestLoader;
@@ -46,6 +47,38 @@ impl TestLoader {
         Self::collect_recursive(root_path, &mut test_files)?;
         test_files.sort();
         Ok(test_files)
+    }
+
+    /// Collect test files by tags using the index system
+    ///
+    /// This method uses the Index to efficiently load tests that match any of the provided tags.
+    /// The Index automatically manages caching and regeneration based on file changes.
+    ///
+    /// # Arguments
+    ///
+    /// * `tags` - Slice of tag names to filter tests by
+    ///
+    /// # Returns
+    ///
+    /// A vector of PathBuf pointing to test JSON files that have at least one of the specified tags
+    ///
+    /// # Environment Variables
+    ///
+    /// * `TEST_PATH` - Base directory for tests (default: "./test")
+    /// * `INDEX_NAME` - Path to the index cache file (default: ".cache/index.json")
+    /// * `DEFAULT_TAG` - Tag assigned to tests with no tags (default: "default")
+    pub fn collect_by_tags(tags: &[String]) -> Result<Vec<PathBuf>> {
+        let paths = Index::load_tagged_tests_paths(tags)?;
+        Ok(paths.into_iter().map(PathBuf::from).collect())
+    }
+
+    /// Collect all tests using the index system
+    ///
+    /// This is more efficient than collect_all_test_files when the index is already built,
+    /// as it uses cached file discovery.
+    pub fn collect_all_indexed() -> Result<Vec<PathBuf>> {
+        let paths = Index::get_all_tests_paths()?;
+        Ok(paths.into_iter().map(PathBuf::from).collect())
     }
 
     /// Check if a file is a JSON file by extension
