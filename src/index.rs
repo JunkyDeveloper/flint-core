@@ -18,7 +18,7 @@ pub struct Index {
 impl Index {
     pub const INDEX_NAME: &'static str = ".cache/index.json";
     pub const DEFAULT_TAG: &'static str = "default";
-    const TEST_PATH: &'static str = "./test";
+    pub const TEST_PATH: &'static str = "./test";
 
     pub fn new(hash: u64, map: &BTreeMap<String, Vec<String>>) -> Self {
         Index {
