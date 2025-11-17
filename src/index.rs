@@ -1,13 +1,14 @@
 use crate::test_spec::TestSpec;
+use anyhow::anyhow;
 use serde::{Deserialize, Serialize};
 use serde_json::to_string_pretty;
 use std::collections::{BTreeMap, hash_map::DefaultHasher};
+use std::env;
 use std::fs;
 use std::fs::{File, OpenOptions, create_dir_all};
 use std::hash::{Hash, Hasher};
 use std::io::{BufReader, Write};
 use std::path::Path;
-use anyhow::anyhow;
 
 #[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Eq)]
 pub struct Index {
@@ -16,9 +17,16 @@ pub struct Index {
 }
 
 impl Index {
-    pub const INDEX_NAME: &'static str = ".cache/index.json";
-    pub const DEFAULT_TAG: &'static str = "default";
-    pub const TEST_PATH: &'static str = "./test";
+    pub fn get_index_name() -> String {
+        env::var("INDEX_NAME").unwrap_or(".cache/index.json".to_string())
+    }
+
+    pub fn get_default_tag() -> String {
+        env::var("DEFAULT_TAG").unwrap_or("default".to_string()).clone()
+    }
+    pub fn get_test_path() -> String {
+        env::var("TEST_PATH").unwrap_or("./test".to_string()).clone()
+    }
 
     pub fn new(hash: u64, map: &BTreeMap<String, Vec<String>>) -> Self {
         Index {
@@ -36,7 +44,10 @@ impl Index {
 
     pub fn generate_index(path: &Path) -> anyhow::Result<Index> {
         if !path.is_dir() {
-            return Err(anyhow!(format!("The path is not a directory: {}", path.to_str().unwrap())));
+            return Err(anyhow!(format!(
+                "The path is not a directory: {}",
+                path.to_str().unwrap()
+            )));
         }
         let all_files = get_all_test_files(path);
         let mut index_map: BTreeMap<String, Vec<String>> = BTreeMap::new();
@@ -56,12 +67,16 @@ impl Index {
                 index_map.entry(tag.clone()).or_default().push(i.clone());
             }
             if test.tags.is_empty() {
-                index_map.entry(Index::DEFAULT_TAG.to_string()).or_default().push(i.clone());
+                index_map
+                    .entry(Index::get_default_tag().to_string())
+                    .or_default()
+                    .push(i.clone());
             }
         }
         let index = Index::new(hash, &index_map);
         let index_string = to_string_pretty(&index)?;
-        let path = Path::new(Index::INDEX_NAME);
+        let name = Index::get_index_name();
+        let path = Path::new(&name);
 
         // create parent directories if they don’t exist
         if let Some(parent) = path.parent() {
@@ -85,8 +100,8 @@ impl Index {
     pub fn load_tagged_tests_paths(scope: &[String]) -> anyhow::Result<Vec<String>> {
         let mut index: Index = Index::empty();
         let mut valid_index: bool = false;
-        if Path::new(Index::INDEX_NAME).exists() {
-            let file = File::open(Index::INDEX_NAME)?;
+        if Path::new(&Index::get_index_name()).exists() {
+            let file = File::open(Index::get_index_name())?;
             let reader = BufReader::new(file);
             match serde_json::from_reader(reader) {
                 Ok(dex) => {
@@ -104,7 +119,7 @@ impl Index {
         }
         if !valid_index {
             // Index does not exists or isn't valid, so need to build the index first
-            index = Index::generate_index(Path::new(Index::TEST_PATH))?;
+            index = Index::generate_index(Path::new(&Index::get_test_path()))?;
         }
         let mut test_paths = vec![];
         for (k, v) in &index.index {
@@ -119,7 +134,7 @@ impl Index {
     }
 
     pub fn get_all_tests_paths() -> anyhow::Result<Vec<String>> {
-        Ok(get_all_test_files(Path::new(Index::TEST_PATH)))
+        Ok(get_all_test_files(Path::new(&Index::get_test_path())))
     }
 }
 
