@@ -1,10 +1,10 @@
 /// Spatial utilities for test positioning and layout
 ///
-/// This module provides utilities for calculating spatial positions for tests
-/// in a grid-based layout, useful for running multiple tests in parallel
-/// without spatial conflicts.
+/// This module provides utilities for:
+/// - Calculating grid offsets for positioning tests in a grid-based layout, useful for running multiple tests in parallel without spatial conflicts.
+/// - Applying offsets to positions or regions, enabling flexible placement of test structures.
+/// - Computing grid dimensions for arranging tests efficiently.
 ///
-/// Calculate grid offset for a test at a given index
 ///
 /// Tests are arranged in a square grid centered at the origin (0, 0).
 /// Each cell has a configurable size to ensure tests don't interfere with each other.

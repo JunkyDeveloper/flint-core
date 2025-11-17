@@ -24,12 +24,10 @@ impl Index {
     pub fn get_default_tag() -> String {
         env::var("DEFAULT_TAG")
             .unwrap_or("default".to_string())
-            .clone()
     }
     pub fn get_test_path() -> String {
         env::var("TEST_PATH")
             .unwrap_or("./test".to_string())
-            .clone()
     }
 
     pub fn new(hash: u64, map: &BTreeMap<String, Vec<String>>) -> Self {

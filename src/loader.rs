@@ -40,8 +40,7 @@ impl TestLoader {
 
     /// Collect all test files recursively from a directory
     ///
-    /// This uses an iterative stack-based approach for better performance
-    /// with large directory trees.
+    /// This uses an iterative stack-based approach to traverse the directory tree.
     pub fn collect_all_test_files(root_path: &Path) -> Result<Vec<PathBuf>> {
         let mut test_files = Vec::new();
         Self::collect_recursive(root_path, &mut test_files)?;
