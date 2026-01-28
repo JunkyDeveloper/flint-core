@@ -1,11 +1,12 @@
-use std::time::Duration;
 use crate::results::{AssertFailure, AssertionResult, InfoType, TestResult};
-use std::collections::BTreeMap;
 use colored::Colorize;
+use std::collections::BTreeMap;
+use std::time::Duration;
 
 /// Extract failures from test results as (test_name, AssertFailure) pairs
 fn extract_failures(results: &[TestResult]) -> Vec<(String, AssertFailure)> {
-    results.iter()
+    results
+        .iter()
         .flat_map(|r| {
             r.assertions.iter().filter_map(move |a| {
                 if let AssertionResult::Failure(f) = a {
@@ -94,7 +95,8 @@ pub fn print_tap(results: &[TestResult]) {
                 println!("  ---");
                 println!(
                     "  message: \"expected {}, got {}\"",
-                    info_type_to_string(&detail.expected), info_type_to_string(&detail.actual)
+                    info_type_to_string(&detail.expected),
+                    info_type_to_string(&detail.actual)
                 );
                 println!(
                     "  at: [{}, {}, {}]",
@@ -108,10 +110,7 @@ pub fn print_tap(results: &[TestResult]) {
 }
 
 /// Print results in JUnit XML format
-pub fn print_junit(
-    results: &[TestResult],
-    elapsed: Duration,
-) {
+pub fn print_junit(results: &[TestResult], elapsed: Duration) {
     let total = results.len();
     let failed = results.iter().filter(|r| !r.success).count();
 
@@ -220,10 +219,7 @@ pub fn print_test_summary(results: &[TestResult]) {
 }
 
 /// Print concise summary (default mode)
-pub fn print_concise_summary(
-    results: &[TestResult],
-    elapsed: Duration,
-) {
+pub fn print_concise_summary(results: &[TestResult], elapsed: Duration) {
     let total = results.len();
     let total_passed = results.iter().filter(|r| r.success).count();
     let total_failed = total - total_passed;
