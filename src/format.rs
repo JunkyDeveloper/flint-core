@@ -185,18 +185,17 @@ fn xml_escape(s: &str) -> String {
         .replace('"', "&quot;")
         .replace('\'', "&apos;")
 }
-const SEPARATOR_WIDTH: usize = 60;
 
 /// Print a separator line
-fn print_separator() {
-    println!("{}", "═".repeat(SEPARATOR_WIDTH).dimmed());
+fn print_separator(separator_width: usize) {
+    println!("{}", "═".repeat(separator_width).dimmed());
 }
 
 /// Print verbose test summary (used in -v mode)
-pub fn print_test_summary(results: &[TestResult]) {
-    println!("\n{}", "═".repeat(SEPARATOR_WIDTH).dimmed());
+pub fn print_test_summary(results: &[TestResult], separator_width: usize) {
+    println!("\n{}", "═".repeat(separator_width).dimmed());
     println!("{}", "Test Summary".cyan().bold());
-    print_separator();
+    print_separator(separator_width);
 
     let total_passed = results.iter().filter(|r| r.success).count();
     let total_failed = results.len() - total_passed;
