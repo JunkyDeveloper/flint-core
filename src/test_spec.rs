@@ -1,5 +1,8 @@
-use serde::{Deserialize, Serialize};
+use rustc_hash::FxHashMap;
+use serde::de::{MapAccess, Visitor};
+use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::HashMap;
+use std::fmt::Formatter;
 use std::path::PathBuf;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -22,12 +25,110 @@ pub struct TestSpec {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SetupSpec {
-    pub cleanup: CleanupSpec,
+    #[serde(default)]
+    pub cleanup: Option<CleanupSpec>,
+    #[serde(default)]
+    pub player: Option<PlayerConfig>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CleanupSpec {
     pub region: [[i32; 3]; 2],
+}
+/// Player inventory slots
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PlayerSlot {
+    // Hotbar (9 slots)
+    Hotbar1,
+    Hotbar2,
+    Hotbar3,
+    Hotbar4,
+    Hotbar5,
+    Hotbar6,
+    Hotbar7,
+    Hotbar8,
+    Hotbar9,
+
+    // Off-hand
+    OffHand,
+
+    // Armor
+    Helmet,
+    Chestplate,
+    Leggings,
+    Boots,
+}
+
+impl PlayerSlot {
+    /// Convert hotbar number (1-9) to PlayerSlot
+    pub fn hotbar(n: u8) -> Option<Self> {
+        match n {
+            1 => Some(Self::Hotbar1),
+            2 => Some(Self::Hotbar2),
+            3 => Some(Self::Hotbar3),
+            4 => Some(Self::Hotbar4),
+            5 => Some(Self::Hotbar5),
+            6 => Some(Self::Hotbar6),
+            7 => Some(Self::Hotbar7),
+            8 => Some(Self::Hotbar8),
+            9 => Some(Self::Hotbar9),
+            _ => None,
+        }
+    }
+}
+
+/// Player configuration for advanced mode (initial inventory setup)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct PlayerConfig {
+    /// Initial inventory state (slot name -> item config)
+    #[serde(default)]
+    pub inventory: HashMap<PlayerSlot, Item>,
+    /// Initially selected hotbar slot (1-9), defaults to 1
+    #[serde(default = "default_selected_hotbar")]
+    pub selected_hotbar: u8,
+}
+
+fn default_selected_hotbar() -> u8 {
+    1
+}
+
+/// An item that can be held or placed in a slot.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Item {
+    /// Item identifier, e.g., "minecraft:honeycomb"
+    pub id: String,
+    /// Stack count (default 1)
+    #[serde(default = "default_count")]
+    pub count: u8,
+}
+
+impl Item {
+    /// Create a new item with count 1.
+    pub fn new(id: impl Into<String>) -> Self {
+        let id = id.into();
+        if id.starts_with("empty") {
+            return Item::empty();
+        }
+        Self { id, count: 1 }
+    }
+
+    /// Create an empty item (air with count 0).
+    pub fn empty() -> Self {
+        Self {
+            id: "minecraft:air".to_string(),
+            count: 0,
+        }
+    }
+
+    /// Create an item with a specific count.
+    pub fn with_count(id: impl Into<String>, count: u8) -> Self {
+        Self {
+            id: id.into(),
+            count,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -54,61 +155,178 @@ impl TickSpec {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// Block specification with ID and properties.
+///
+/// Deserializes from JSON with backwards compatibility:
+/// - `"powered": false` → `"powered": "false"`
+/// - `"delay": 2` → `"delay": "2"`
+/// - `"facing": "north"` → `"facing": "north"`
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Block {
+    /// Block identifier, e.g., "minecraft:stone"
     pub id: String,
-    #[serde(flatten)]
-    pub properties: HashMap<String, serde_json::Value>,
+    /// Block state properties, e.g., {"powered": "true", "facing": "north"}
+    #[serde(flatten, skip_serializing_if = "FxHashMap::is_empty")]
+    pub properties: FxHashMap<String, String>,
 }
 
 impl Block {
+    /// Create a new block with no properties.
+    pub fn new(id: impl Into<String>) -> Self {
+        Self {
+            id: id.into(),
+            properties: FxHashMap::default(),
+        }
+    }
+
+    /// Create a block with the given properties.
+    pub fn with_properties(id: impl Into<String>, properties: FxHashMap<String, String>) -> Self {
+        Self {
+            id: id.into(),
+            properties,
+        }
+    }
+
+    /// Check if this block is air.
+    pub fn is_air(&self) -> bool {
+        self.id == "minecraft:air" || self.id == "air"
+    }
+
+    /// Generate a Minecraft command string like `minecraft:lever[powered=false,face=floor]`.
     pub fn to_command(&self) -> String {
         if self.properties.is_empty() {
             self.id.clone()
         } else {
-            let mut props: Vec<String> = Vec::new();
-
-            for (key, value) in &self.properties {
-                if key == "properties" {
-                    if let serde_json::Value::Object(nested) = value {
-                        for (nested_key, nested_value) in nested {
-                            let val = match nested_value {
-                                serde_json::Value::String(s) => s.clone(),
-                                serde_json::Value::Bool(b) => b.to_string(),
-                                serde_json::Value::Number(n) => n.to_string(),
-                                _ => nested_value.to_string(),
-                            };
-                            props.push(format!("{}={}", nested_key, val));
-                        }
-                    }
-                } else {
-                    let val = match value {
-                        serde_json::Value::String(s) => s.clone(),
-                        serde_json::Value::Bool(b) => b.to_string(),
-                        serde_json::Value::Number(n) => n.to_string(),
-                        _ => value.to_string(),
-                    };
-                    props.push(format!("{}={}", key, val));
-                }
-            }
-
-            if props.is_empty() {
-                self.id.clone()
-            } else {
-                format!("{}[{}]", self.id, props.join(","))
-            }
+            let props: Vec<String> = self
+                .properties
+                .iter()
+                .map(|(key, value)| format!("{}={}", key, value))
+                .collect();
+            format!("{}[{}]", self.id, props.join(","))
         }
     }
+}
+
+impl<'de> Deserialize<'de> for Block {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct BlockVisitor;
+
+        impl<'de> Visitor<'de> for BlockVisitor {
+            type Value = Block;
+
+            fn expecting(&self, formatter: &mut Formatter) -> std::fmt::Result {
+                formatter.write_str("a block object with 'id' field and optional properties")
+            }
+
+            fn visit_map<M>(self, mut map: M) -> Result<Block, M::Error>
+            where
+                M: MapAccess<'de>,
+            {
+                let mut id: Option<String> = None;
+                let mut properties = FxHashMap::default();
+
+                while let Some(key) = map.next_key::<String>()? {
+                    if key == "id" {
+                        id = Some(map.next_value()?);
+                    } else if key == "properties" {
+                        // Handle nested properties object
+                        let nested: FxHashMap<String, serde_json::Value> = map.next_value()?;
+                        for (k, v) in nested {
+                            let value_str = json_value_to_string(&v);
+                            properties.insert(k, value_str);
+                        }
+                    } else {
+                        // Handle flat properties - convert JSON values to strings
+                        let value: serde_json::Value = map.next_value()?;
+                        let value_str = json_value_to_string(&value);
+                        properties.insert(key, value_str);
+                    }
+                }
+
+                let id = id.ok_or_else(|| serde::de::Error::missing_field("id"))?;
+                Ok(Block { id, properties })
+            }
+        }
+
+        deserializer.deserialize_map(BlockVisitor)
+    }
+}
+
+/// Convert a JSON value to a string representation for block properties.
+fn json_value_to_string(value: &serde_json::Value) -> String {
+    match value {
+        serde_json::Value::String(s) => s.clone(),
+        serde_json::Value::Bool(b) => b.to_string(),
+        serde_json::Value::Number(n) => n.to_string(),
+        serde_json::Value::Null => String::new(),
+        _ => value.to_string(),
+    }
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum BlockFace {
+    Top,    // +Y
+    Bottom, // -Y
+    North,  // -Z
+    South,  // +Z
+    East,   // +X
+    West,   // -X
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "do", rename_all = "snake_case")]
 pub enum ActionType {
-    Place { pos: [i32; 3], block: Block },
-    PlaceEach { blocks: Vec<BlockPlacement> },
-    Fill { region: [[i32; 3]; 2], with: Block },
-    Remove { pos: [i32; 3] },
-    Assert { checks: Vec<BlockCheck> },
+    // Block actions
+    Place {
+        pos: [i32; 3],
+        block: Block,
+    },
+    PlaceEach {
+        blocks: Vec<BlockPlacement>,
+    },
+    Fill {
+        region: [[i32; 3]; 2],
+        with: Block,
+    },
+    Remove {
+        pos: [i32; 3],
+    },
+
+    // Assertion actions
+    Assert {
+        checks: Vec<BlockCheck>,
+    },
+
+    // Player actions (for item interactions)
+    /// Use an item on a block face (e.g., honeycomb on copper, axe on log)
+    UseItemOn {
+        pos: [i32; 3],
+        face: BlockFace,
+        /// Item to use (for simple mode). If not specified, uses player's active item.
+        #[serde(default)]
+        item: Option<String>,
+    },
+
+    /// Set an item in a player slot
+    SetSlot {
+        slot: PlayerSlot,
+        #[serde(default)]
+        item: Option<String>,
+        #[serde(default = "default_count")]
+        count: u8,
+    },
+
+    /// Select which hotbar slot is active (1-9)
+    SelectHotbar {
+        slot: u8,
+    },
+}
+
+fn default_count() -> u8 {
+    1
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -149,7 +367,11 @@ impl TestSpec {
     pub fn cleanup_region(&self) -> [[i32; 3]; 2] {
         self.setup
             .as_ref()
-            .map(|s| s.cleanup.region)
+            .ok_or_else(|| panic!("setup is missing"))
+            .unwrap()
+            .cleanup
+            .as_ref()
+            .map(|s| s.region)
             .expect("Cleanup region is required but not present")
     }
 
@@ -158,8 +380,10 @@ impl TestSpec {
         let setup = self.setup.as_ref().ok_or_else(|| {
             anyhow::anyhow!("Test '{}' missing required 'setup' section", self.name)
         })?;
-
-        let region = setup.cleanup.region;
+        if setup.cleanup.is_none() {
+            anyhow::bail!("Test '{}' missing 'cleanup' section", self.name);
+        }
+        let region = setup.cleanup.as_ref().unwrap().region;
         let min = region[0];
         let max = region[1];
 
@@ -234,6 +458,11 @@ impl TestSpec {
                         self.validate_position(check.pos, &region)?;
                     }
                 }
+                ActionType::UseItemOn { pos, .. } => {
+                    self.validate_position(*pos, &region)?;
+                }
+                // SetSlot and SelectHotbar don't have positions to validate
+                ActionType::SetSlot { .. } | ActionType::SelectHotbar { .. } => {}
             }
         }
 
@@ -272,19 +501,16 @@ impl TestSpec {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::Value;
+
     #[test]
     fn redstone_lever_with_two_properties_command_string() {
-        let mut block = Block {
-            id: "minecraft:lever".to_string(),
-            properties: HashMap::new(),
-        };
+        let mut block = Block::new("minecraft:lever");
         block
             .properties
-            .insert("powered".to_string(), Value::from(false));
+            .insert("powered".to_string(), "false".to_string());
         block
             .properties
-            .insert("face".to_string(), Value::from("floor"));
+            .insert("face".to_string(), "floor".to_string());
         let result = block.to_command();
         assert!(
             result == "minecraft:lever[powered=false,face=floor]"
@@ -293,46 +519,38 @@ mod tests {
             result
         );
     }
+
     #[test]
     fn only_id_command_string() {
-        let block = Block {
-            id: "minecraft:stone".to_string(),
-            properties: HashMap::new(),
-        };
+        let block = Block::new("minecraft:stone");
         let result = block.to_command();
         assert_eq!(result, "minecraft:stone");
     }
+
     #[test]
     fn empty_id_command_string() {
-        let block = Block {
-            id: "".to_string(),
-            properties: HashMap::new(),
-        };
+        let block = Block::new("");
         let result = block.to_command();
         assert_eq!(result, "");
     }
 
     #[test]
     fn test_redstone_wire() {
-        let mut block = Block {
-            id: "minecraft:redstone_wire".to_string(),
-            properties: HashMap::new(),
-        };
+        let mut block = Block::new("minecraft:redstone_wire");
         block
             .properties
-            .insert("north".to_string(), Value::from("side"));
+            .insert("north".to_string(), "side".to_string());
         block
             .properties
-            .insert("east".to_string(), Value::from("up"));
+            .insert("east".to_string(), "up".to_string());
         block
             .properties
-            .insert("south".to_string(), Value::from("none"));
+            .insert("south".to_string(), "none".to_string());
         block
             .properties
-            .insert("west".to_string(), Value::from("side"));
+            .insert("west".to_string(), "side".to_string());
 
         let result = block.to_command();
-        // Prüfe dass ID und Properties vorhanden sind
         assert!(result.starts_with("minecraft:redstone_wire["));
         assert!(result.ends_with("]"));
         assert!(result.contains("north=side"));
@@ -340,6 +558,7 @@ mod tests {
         assert!(result.contains("south=none"));
         assert!(result.contains("west=side"));
     }
+
     #[test]
     fn test_parse_lever() {
         let json = r#"{
@@ -350,12 +569,11 @@ mod tests {
 
         let block: Block = serde_json::from_str(json).unwrap();
         assert_eq!(block.id, "minecraft:lever");
-        assert_eq!(block.properties.get("powered"), Some(&Value::Bool(false)));
-        assert_eq!(
-            block.properties.get("face"),
-            Some(&Value::String("floor".to_string()))
-        );
+        // Values are converted to strings
+        assert_eq!(block.properties.get("powered"), Some(&"false".to_string()));
+        assert_eq!(block.properties.get("face"), Some(&"floor".to_string()));
     }
+
     #[test]
     #[should_panic(expected = "missing field `id`")]
     fn test_parse_missing_id() {
@@ -366,6 +584,7 @@ mod tests {
 
         let _block: Block = serde_json::from_str(json).unwrap();
     }
+
     #[test]
     #[should_panic(expected = "missing field `id`")]
     fn test_parse_missing_object() {
@@ -384,11 +603,9 @@ mod tests {
 
         let block: Block = serde_json::from_str(json).unwrap();
         assert_eq!(block.id, "minecraft:lever");
-        assert_eq!(block.properties.get("powered"), Some(&Value::Null));
-        assert_eq!(
-            block.properties.get("face"),
-            Some(&Value::String("floor".to_string()))
-        );
+        // Null is converted to empty string
+        assert_eq!(block.properties.get("powered"), Some(&String::new()));
+        assert_eq!(block.properties.get("face"), Some(&"floor".to_string()));
     }
 
     #[test]
@@ -403,7 +620,9 @@ mod tests {
 
         let block: Block = serde_json::from_str(json).unwrap();
         assert_eq!(block.id, "minecraft:chest");
-        assert!(block.properties.get("metadata").unwrap().is_object());
+        assert_eq!(block.properties.get("facing"), Some(&"north".to_string()));
+        // Complex objects are serialized as JSON strings
+        assert!(block.properties.contains_key("metadata"));
     }
 
     #[test]
@@ -415,7 +634,8 @@ mod tests {
 
         let block: Block = serde_json::from_str(json).unwrap();
         assert_eq!(block.id, "minecraft:custom_block");
-        assert!(block.properties.get("colors").unwrap().is_array());
+        // Arrays are serialized as JSON strings
+        assert!(block.properties.contains_key("colors"));
     }
 
     #[test]
@@ -428,6 +648,7 @@ mod tests {
         let block: Block = serde_json::from_str(json).unwrap();
         assert_eq!(block.id, "");
         assert_eq!(block.properties.len(), 1);
+        assert_eq!(block.properties.get("powered"), Some(&"false".to_string()));
     }
 
     #[test]
@@ -442,7 +663,7 @@ mod tests {
         assert_eq!(block.id, "minecraft:custom");
         assert_eq!(
             block.properties.get("name"),
-            Some(&Value::String("Test \"quoted\" value".to_string()))
+            Some(&"Test \"quoted\" value".to_string())
         );
     }
 
@@ -457,14 +678,14 @@ mod tests {
 
         let block: Block = serde_json::from_str(json).unwrap();
         assert_eq!(block.id, "minecraft:block");
-        assert!(block.properties.get("integer").unwrap().is_number());
-        assert!(block.properties.get("float").unwrap().is_number());
-        assert!(block.properties.get("negative").unwrap().is_number());
+        // Numbers are converted to strings
+        assert_eq!(block.properties.get("integer"), Some(&"42".to_string()));
+        assert_eq!(block.properties.get("float"), Some(&"3.14".to_string()));
+        assert_eq!(block.properties.get("negative"), Some(&"-10".to_string()));
     }
 
     #[test]
     fn test_nested_properties_object() {
-        // Test the new format where properties are nested inside a "properties" key
         let json = r#"{
             "id": "minecraft:lever",
             "properties": {
@@ -476,7 +697,6 @@ mod tests {
         let block: Block = serde_json::from_str(json).unwrap();
         let result = block.to_command();
 
-        // Order may vary due to HashMap
         assert!(result.contains("minecraft:lever["));
         assert!(result.contains("powered=true"));
         assert!(result.contains("face=floor"));
@@ -502,7 +722,6 @@ mod tests {
 
     #[test]
     fn test_empty_nested_properties() {
-        // When properties object is empty, should return just the id
         let json = r#"{
             "id": "minecraft:stone",
             "properties": {}
@@ -512,33 +731,6 @@ mod tests {
         let result = block.to_command();
 
         assert_eq!(result, "minecraft:stone");
-    }
-
-    #[test]
-    fn test_mixed_flat_and_nested_properties() {
-        // Test when there's both flat properties and nested ones
-        let mut block = Block {
-            id: "minecraft:test".to_string(),
-            properties: HashMap::new(),
-        };
-
-        // Add a flat property
-        block
-            .properties
-            .insert("flat_prop".to_string(), Value::from("value1"));
-
-        // Add nested properties
-        let mut nested = serde_json::Map::new();
-        nested.insert("nested_prop".to_string(), Value::from("value2"));
-        block
-            .properties
-            .insert("properties".to_string(), Value::Object(nested));
-
-        let result = block.to_command();
-
-        assert!(result.contains("minecraft:test["));
-        assert!(result.contains("flat_prop=value1"));
-        assert!(result.contains("nested_prop=value2"));
     }
 
     #[test]
@@ -556,5 +748,17 @@ mod tests {
 
         assert!(result.contains("extended=true"));
         assert!(result.contains("facing=up"));
+    }
+
+    #[test]
+    fn test_is_air() {
+        let air = Block::new("minecraft:air");
+        assert!(air.is_air());
+
+        let air_short = Block::new("air");
+        assert!(air_short.is_air());
+
+        let stone = Block::new("minecraft:stone");
+        assert!(!stone.is_air());
     }
 }
