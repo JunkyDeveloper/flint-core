@@ -30,6 +30,12 @@
       "default": [],
       "description": "Names of tests that must pass before this test can run"
     },
+    "minecraftIds": {
+      "type": "array",
+      "items": { "type": "string" },
+      "default": [],
+      "description": "Minecraft version IDs this test targets"
+    },
     "setup": {
       "$ref": "#/$defs/SetupSpec",
       "description": "Setup configuration including cleanup region and player configuration"
@@ -99,9 +105,9 @@
     },
     "SlotConfig": {
       "type": "object",
-      "required": ["item"],
+      "required": ["id"],
       "properties": {
-        "item": {
+        "id": {
           "type": "string",
           "description": "Item identifier, e.g., 'minecraft:honeycomb'"
         },
@@ -152,30 +158,21 @@
       "description": "Tick specification - either a single tick or array of ticks"
     },
     "Block": {
-      "oneOf": [
-        {
+      "type": "object",
+      "required": ["id"],
+      "properties": {
+        "id": {
           "type": "string",
-          "description": "Block identifier as a string, e.g., 'minecraft:stone' or 'minecraft:lever[powered=true]'"
+          "description": "Block identifier, e.g., 'minecraft:lever'"
         },
-        {
+        "properties": {
           "type": "object",
-          "required": ["id"],
-          "properties": {
-            "id": {
-              "type": "string",
-              "description": "Block identifier, e.g., 'minecraft:lever'"
-            },
-            "properties": {
-              "type": "object",
-              "additionalProperties": true,
-              "description": "Block state properties as a nested object"
-            }
-          },
           "additionalProperties": true,
-          "description": "Block with identifier and optional state properties (can be flat or nested under 'properties')"
+          "description": "Block state properties as a nested object"
         }
-      ],
-      "description": "Block specification - either a string identifier or an object with id and properties"
+      },
+      "additionalProperties": true,
+      "description": "Block specification with identifier and optional state properties (can be flat or nested under 'properties')"
     },
     "BlockFace": {
       "type": "string",
