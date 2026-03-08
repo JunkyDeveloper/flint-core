@@ -100,8 +100,8 @@
     "PlayerSlot": {
       "type": "string",
       "enum": [
-        "hotbar_1", "hotbar_2", "hotbar_3", "hotbar_4", "hotbar_5",
-        "hotbar_6", "hotbar_7", "hotbar_8", "hotbar_9",
+        "hotbar1", "hotbar2", "hotbar3", "hotbar4", "hotbar5",
+        "hotbar6", "hotbar7", "hotbar8", "hotbar9",
         "off_hand",
         "helmet", "chestplate", "leggings", "boots"
       ],
