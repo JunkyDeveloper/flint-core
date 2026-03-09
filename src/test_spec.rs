@@ -389,7 +389,10 @@ pub fn parse_version(v: &str) -> (u64, u64, u64) {
 /// Result of a two-phase test spec load
 pub enum TestSpecLoadResult {
     Loaded(TestSpec),
-    Skipped { spec: MinimalTestSpec, reason: String },
+    Skipped {
+        spec: MinimalTestSpec,
+        reason: String,
+    },
 }
 
 impl TestSpec {
@@ -417,18 +420,17 @@ impl TestSpec {
         use serde::Deserialize;
         let value: serde_json::Value = serde_json::from_str(json)?;
         let minimal = MinimalTestSpec::deserialize(&value)?;
-        if let Some(impl_ver) = impl_version {
-            if let Some(test_ver) = &minimal.flint_version {
-                if parse_version(test_ver) > parse_version(impl_ver) {
-                    return Ok(TestSpecLoadResult::Skipped {
-                        reason: format!(
-                            "requires flint_version {}, implementation supports {}",
-                            test_ver, impl_ver
-                        ),
-                        spec: minimal,
-                    });
-                }
-            }
+        if let Some(impl_ver) = impl_version
+            && let Some(test_ver) = &minimal.flint_version
+            && parse_version(test_ver) > parse_version(impl_ver)
+        {
+            return Ok(TestSpecLoadResult::Skipped {
+                reason: format!(
+                    "requires flint_version {}, implementation supports {}",
+                    test_ver, impl_ver
+                ),
+                spec: minimal,
+            });
         }
         let spec = TestSpec::deserialize(value)?;
         Ok(TestSpecLoadResult::Loaded(spec))

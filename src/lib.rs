@@ -17,4 +17,4 @@ pub use traits::{BlockPos, FlintAdapter, FlintPlayer, FlintWorld, ServerInfo};
 pub use crate::loader::TestLoader;
 pub use crate::test_spec::{Block, Item, PlayerSlot, TestSpec, TestSpecLoadResult};
 
-pub const PROTOCOL_VERSION: &'static (u64, u64, u64) = &(1, 0, 0);
+pub const PROTOCOL_VERSION: &(u64, u64, u64) = &(1, 0, 0);
