@@ -3,7 +3,8 @@
 //! The `TestRunner` loads tests and executes them against a server adapter.
 
 use crate::results::{
-    ActionOutcome, AssertFailure, AssertionResult, InfoType, TestResult, TestSummary,
+    ActionOutcome, AssertFailure, AssertPosition, AssertionResult, InfoType, TestResult,
+    TestSummary,
 };
 use crate::test_spec::{ActionType, AssertType, Item, PlayerSlot};
 use crate::timeline::TimelineAggregate;
@@ -190,7 +191,7 @@ impl<A: FlintAdapter> TestRunner<A> {
                                         expected_str,
                                         actual.to_command(),
                                     ),
-                                    position: Some(pos),
+                                    position: AssertPosition::from_array(pos),
                                     execution_time_ms: None,
                                     expected: InfoType::Blocks(expected_blocks),
                                     actual: InfoType::Block(actual),
@@ -202,7 +203,7 @@ impl<A: FlintAdapter> TestRunner<A> {
                             if let Some(actual) = p.get_slot(inv.slot) {
                                 if !item_matches(&actual, &inv.is) {
                                     return ActionOutcome::AssertFailed(AssertFailure::new_item(
-                                        _tick, &inv.is, &actual,
+                                        _tick, &inv.is, &actual, inv.slot,
                                     ));
                                 }
                             } else {
@@ -213,6 +214,7 @@ impl<A: FlintAdapter> TestRunner<A> {
                                 ));
                             }
                         }
+                        #[allow(unused)]
                         _ => {
                             log::error!("Unsupported assertion type: {:?}", check);
                         }
@@ -262,15 +264,15 @@ impl<A: FlintAdapter> TestRunner<A> {
 fn check_id(actual: &str, expected: &str) -> bool {
     if actual != expected {
         // Also try without minecraft: prefix
-        let expected_id = if expected.starts_with("minecraft:") {
-            &expected[10..]
+        let expected_id = if let Some(stripped) = expected.strip_prefix("minecraft:") {
+            stripped
         } else {
-            &expected
+            expected
         };
-        let actual_id = if actual.starts_with("minecraft:") {
-            &actual[10..]
+        let actual_id = if let Some(stripped) = expected.strip_prefix("minecraft:") {
+            stripped
         } else {
-            &actual
+            actual
         };
         if actual_id != expected_id {
             return false;

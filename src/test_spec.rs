@@ -158,6 +158,18 @@ impl Item {
             data,
         }
     }
+    pub fn to_command(&self) -> String {
+        if self.data.is_empty() {
+            self.id.clone()
+        } else {
+            let props: Vec<String> = self
+                .data
+                .iter()
+                .map(|(key, value)| format!("{}={}", key, value))
+                .collect();
+            format!("{}[{}]", self.id, props.join(","))
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -515,8 +527,10 @@ impl TestSpec {
                 ActionType::Assert { checks } => {
                     for check in checks {
                         match check {
-                            AssertType::Block(block) => self.validate_position(block.pos, &region)?,
-                            &AssertType::Inventory(_) => todo!()
+                            AssertType::Block(block) => {
+                                self.validate_position(block.pos, &region)?
+                            }
+                            &AssertType::Inventory(_) => todo!(),
                         }
                     }
                 }
