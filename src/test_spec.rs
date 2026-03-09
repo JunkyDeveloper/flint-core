@@ -2,7 +2,7 @@ use rustc_hash::FxHashMap;
 use serde::de::{MapAccess, Visitor};
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::HashMap;
-use std::fmt::Formatter;
+use std::fmt::{Display, Formatter};
 use std::path::PathBuf;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -41,6 +41,7 @@ pub struct CleanupSpec {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum PlayerSlot {
+    None,
     // Hotbar (9 slots)
     Hotbar1,
     Hotbar2,
@@ -80,6 +81,12 @@ impl PlayerSlot {
     }
 }
 
+impl Display for PlayerSlot {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
 /// Player configuration for advanced mode (initial inventory setup)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -104,6 +111,8 @@ pub struct Item {
     /// Stack count (default 1)
     #[serde(default = "default_count")]
     pub count: u8,
+    #[serde(flatten, skip_serializing_if = "FxHashMap::is_empty")]
+    pub data: FxHashMap<String, String>,
 }
 
 impl Item {
@@ -113,7 +122,11 @@ impl Item {
         if id.starts_with("empty") {
             return Item::empty();
         }
-        Self { id, count: 1 }
+        Self {
+            id,
+            count: 1,
+            data: FxHashMap::default(),
+        }
     }
 
     /// Create an empty item (air with count 0).
@@ -121,6 +134,7 @@ impl Item {
         Self {
             id: "minecraft:air".to_string(),
             count: 0,
+            data: FxHashMap::default(),
         }
     }
 
@@ -129,6 +143,19 @@ impl Item {
         Self {
             id: id.into(),
             count,
+            data: FxHashMap::default(),
+        }
+    }
+    /// Create an item with a specific count and data.
+    pub fn with_data_and_count(
+        id: impl Into<String>,
+        count: u8,
+        data: FxHashMap<String, String>,
+    ) -> Self {
+        Self {
+            id: id.into(),
+            count,
+            data,
         }
     }
 }
@@ -299,7 +326,7 @@ pub enum ActionType {
 
     // Assertion actions
     Assert {
-        checks: Vec<BlockCheck>,
+        checks: Vec<AssertType>,
     },
 
     // Player actions (for item interactions)
@@ -357,6 +384,18 @@ impl BlockSpec {
 pub struct BlockCheck {
     pub pos: [i32; 3],
     pub is: BlockSpec,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InventoryCheck {
+    pub slot: PlayerSlot,
+    pub is: Item,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum AssertType {
+    Block(BlockCheck),
+    Inventory(InventoryCheck),
 }
 
 impl TestSpec {
@@ -475,7 +514,10 @@ impl TestSpec {
                 }
                 ActionType::Assert { checks } => {
                     for check in checks {
-                        self.validate_position(check.pos, &region)?;
+                        match check {
+                            AssertType::Block(block) => self.validate_position(block.pos, &region)?,
+                            &AssertType::Inventory(_) => todo!()
+                        }
                     }
                 }
                 ActionType::UseItemOn { pos, .. } => {

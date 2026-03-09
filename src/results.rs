@@ -1,4 +1,4 @@
-use crate::format;
+use crate::{format, Item, PlayerSlot};
 use crate::results::AssertionResult::Failure;
 use crate::test_spec::Block;
 use serde::{Deserialize, Serialize};
@@ -19,13 +19,15 @@ pub enum InfoType {
     String(String),
     Block(Block),
     Blocks(Vec<Block>),
+    Item(Item),
+    Slot(PlayerSlot),
 }
 
 impl InfoType {
     pub fn get_string(&self) -> Option<String> {
         match self {
             InfoType::String(s) => Some(s.clone()),
-            InfoType::Block(_) | InfoType::Blocks(_) => None,
+            InfoType::Block(_) | InfoType::Blocks(_) | InfoType::Item(_) | InfoType::Slot(_) => None,
         }
     }
 }
@@ -39,6 +41,8 @@ impl From<InfoType> for String {
                 .map(|b| b.to_command())
                 .collect::<Vec<_>>()
                 .join(" or "),
+            InfoType::Slot(slot) => slot.to_string(),
+            InfoType::Item(item) => String::default(),
         }
     }
 }
@@ -52,6 +56,8 @@ impl From<&InfoType> for String {
                 .map(|b| b.to_command())
                 .collect::<Vec<_>>()
                 .join(" or "),
+            InfoType::Slot(slot) => slot.to_string(),
+            InfoType::Item(item) => String::default(),
         }
     }
 }
@@ -70,7 +76,7 @@ pub struct AssertFailure {
     /// Error message if the assertion failed
     pub error_message: String,
     /// Position involved in the assertion, if applicable
-    pub position: [i32; 3],
+    pub position: Option<[i32; 3]>,
     /// Time taken to execute this assertion in milliseconds
     pub execution_time_ms: Option<u64>,
     /// What as expected
@@ -91,16 +97,43 @@ impl AssertFailure {
         Self {
             tick,
             error_message: error.into(),
-            position,
+            position: Some(position),
             execution_time_ms: None,
             expected,
             actual,
         }
     }
 
+    pub fn new_slot(tick: u32, expected: PlayerSlot, actual: PlayerSlot) -> AssertFailure {
+        Self {
+            tick,
+            error_message: format!(
+                "Item slot does not exist: {:?}",
+                expected
+            ),
+            position: None,
+            execution_time_ms: None,
+            expected: InfoType::Slot(expected),
+            actual: InfoType::Slot(actual),
+        }
+    }
+    pub fn new_item(tick: u32, expected: &Item, actual: &Item) -> AssertFailure {
+        Self {
+            tick,
+            error_message: format!(
+                "Item slot does not exist: {:?}",
+                expected
+            ),
+            position: None,
+            execution_time_ms: None,
+            expected: InfoType::Item(expected.clone()),
+            actual: InfoType::Item(actual.clone()),
+        }
+    }
+
     /// Add position information to the assertion result
     pub fn with_position(mut self, pos: [i32; 3]) -> Self {
-        self.position = pos;
+        self.position = Some(pos);
         self
     }
 
@@ -345,7 +378,7 @@ mod tests {
         if let Failure(f) = result {
             assert_eq!(f.tick, 10);
             assert_eq!(f.error_message, "Block mismatch");
-            assert_eq!(f.position, [5, 6, 7]);
+            assert_eq!(f.position, Some([5, 6, 7]));
         } else {
             panic!("Expected Failure variant");
         }
