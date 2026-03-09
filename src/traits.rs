@@ -13,6 +13,8 @@ pub type BlockPos = [i32; 3];
 #[derive(Debug, Clone)]
 pub struct ServerInfo {
     pub minecraft_version: String,
+    /// Maximum supported Flint version. `None` means supports all versions.
+    pub flint_version: Option<String>,
 }
 
 // =============================================================================

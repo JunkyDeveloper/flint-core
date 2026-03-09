@@ -5,7 +5,7 @@
 use crate::results::{
     ActionOutcome, AssertFailure, AssertionResult, InfoType, TestResult, TestSummary,
 };
-use crate::test_spec::{ActionType, Item, PlayerSlot};
+use crate::test_spec::{parse_version, ActionType, Item, PlayerSlot};
 use crate::timeline::TimelineAggregate;
 use crate::traits::{FlintAdapter, FlintPlayer, FlintWorld};
 use crate::{Block, TestSpec};
@@ -48,6 +48,21 @@ impl<A: FlintAdapter> TestRunner<A> {
 
     /// Run a single test
     pub fn run_test(&self, spec: &TestSpec) -> TestResult {
+        // Version gate: skip if the test requires a higher flint_version than supported
+        if let Some(test_version) = &spec.flint_version {
+            if let Some(impl_version) = &self.adapter.server_info().flint_version {
+                if parse_version(test_version) > parse_version(impl_version) {
+                    return TestResult::skipped(
+                        &spec.name,
+                        format!(
+                            "requires flint_version {}, implementation supports {}",
+                            test_version, impl_version
+                        ),
+                    );
+                }
+            }
+        }
+
         let start_time = Instant::now();
         let mut world = self.adapter.create_test_world();
 
@@ -269,4 +284,92 @@ fn block_matches(actual: &Block, expected: &Block) -> bool {
     }
 
     true
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::traits::{FlintPlayer, FlintWorld, ServerInfo};
+    use crate::{Block, BlockPos};
+
+    struct MockWorld;
+    impl FlintWorld for MockWorld {
+        fn do_tick(&mut self) {}
+        fn current_tick(&self) -> u64 { 0 }
+        fn get_block(&self, _pos: BlockPos) -> Block { Block::new("minecraft:air") }
+        fn set_block(&mut self, _pos: BlockPos, _block: &Block) {}
+        fn create_player(&mut self) -> Box<dyn FlintPlayer> { unimplemented!() }
+    }
+
+    struct MockAdapter {
+        flint_version: Option<String>,
+    }
+    impl FlintAdapter for MockAdapter {
+        fn create_test_world(&self) -> Box<dyn FlintWorld> { Box::new(MockWorld) }
+        fn server_info(&self) -> ServerInfo {
+            ServerInfo {
+                minecraft_version: "1.21".to_string(),
+                flint_version: self.flint_version.clone(),
+            }
+        }
+    }
+
+    fn minimal_spec(name: &str, flint_version: Option<&str>) -> TestSpec {
+        TestSpec {
+            flint_version: flint_version.map(str::to_string),
+            name: name.to_string(),
+            description: None,
+            tags: vec![],
+            minecraft_ids: vec![],
+            dependencies: vec![],
+            setup: None,
+            timeline: vec![],
+            breakpoints: vec![],
+        }
+    }
+
+    #[test]
+    fn test_version_skip_when_test_higher() {
+        let adapter = Arc::new(MockAdapter { flint_version: Some("1.0".to_string()) });
+        let runner = TestRunner::new(adapter);
+        let spec = minimal_spec("hi-ver", Some("2.0"));
+        let result = runner.run_test(&spec);
+        assert!(result.skipped, "expected skip when test requires 2.0 and impl supports 1.0");
+    }
+
+    #[test]
+    fn test_no_skip_when_versions_equal() {
+        let adapter = Arc::new(MockAdapter { flint_version: Some("1.0".to_string()) });
+        let runner = TestRunner::new(adapter);
+        let spec = minimal_spec("same-ver", Some("1.0"));
+        let result = runner.run_test(&spec);
+        assert!(!result.skipped);
+    }
+
+    #[test]
+    fn test_no_skip_when_test_lower() {
+        let adapter = Arc::new(MockAdapter { flint_version: Some("2.0".to_string()) });
+        let runner = TestRunner::new(adapter);
+        let spec = minimal_spec("low-ver", Some("1.0"));
+        let result = runner.run_test(&spec);
+        assert!(!result.skipped);
+    }
+
+    #[test]
+    fn test_no_skip_when_spec_has_no_version() {
+        let adapter = Arc::new(MockAdapter { flint_version: Some("1.0".to_string()) });
+        let runner = TestRunner::new(adapter);
+        let spec = minimal_spec("no-ver", None);
+        let result = runner.run_test(&spec);
+        assert!(!result.skipped);
+    }
+
+    #[test]
+    fn test_no_skip_when_adapter_has_no_version() {
+        let adapter = Arc::new(MockAdapter { flint_version: None });
+        let runner = TestRunner::new(adapter);
+        let spec = minimal_spec("any-ver", Some("99.0"));
+        let result = runner.run_test(&spec);
+        assert!(!result.skipped, "None impl_version means supports all");
+    }
 }
