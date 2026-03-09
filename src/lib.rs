@@ -15,4 +15,6 @@ pub use traits::{BlockPos, FlintAdapter, FlintPlayer, FlintWorld, ServerInfo};
 
 // Re-export flint-core types commonly used with this library
 pub use crate::loader::TestLoader;
-pub use crate::test_spec::{Block, Item, PlayerSlot, TestSpec};
+pub use crate::test_spec::{Block, Item, PlayerSlot, TestSpec, TestSpecLoadResult};
+
+pub const PROTOCOL_VERSION: &'static (u64, u64, u64) = &(1, 0, 0);
