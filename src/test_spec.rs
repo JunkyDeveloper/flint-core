@@ -5,6 +5,23 @@ use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use std::path::PathBuf;
 
+/// Lightweight header parsed before full deserialization.
+/// Used for version gating and test indexing.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MinimalTestSpec {
+    #[serde(default)]
+    pub flint_version: Option<String>,
+    pub name: String,
+    pub description: Option<String>,
+    #[serde(default)]
+    pub tags: Vec<String>,
+    #[serde(default)]
+    pub minecraft_ids: Vec<String>,
+    #[serde(default)]
+    pub dependencies: Vec<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TestSpec {
@@ -398,6 +415,24 @@ pub struct BlockCheck {
     pub is: BlockSpec,
 }
 
+/// Parse a "major.minor.patch" version string into a comparable tuple.
+/// Missing components default to 0.
+pub fn parse_version(v: &str) -> (u64, u64, u64) {
+    let mut parts = v.splitn(3, '.');
+    let major = parts.next().and_then(|s| s.parse().ok()).unwrap_or(0);
+    let minor = parts.next().and_then(|s| s.parse().ok()).unwrap_or(0);
+    let patch = parts.next().and_then(|s| s.parse().ok()).unwrap_or(0);
+    (major, minor, patch)
+}
+
+/// Result of a two-phase test spec load
+pub enum TestSpecLoadResult {
+    Loaded(TestSpec),
+    Skipped {
+        spec: MinimalTestSpec,
+        reason: String,
+    },
+}
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InventoryCheck {
     pub slot: PlayerSlot,
@@ -423,6 +458,32 @@ impl TestSpec {
         })?;
         spec.validate(validate_cleanup)?;
         Ok(spec)
+    }
+
+    /// Two-phase load: checks `flintVersion` before full deserialization.
+    ///
+    /// Pass `impl_version = None` to skip version checking (treat as "supports all").
+    pub fn try_load(
+        json: &str,
+        impl_version: Option<&str>,
+    ) -> Result<TestSpecLoadResult, serde_json::Error> {
+        use serde::Deserialize;
+        let value: serde_json::Value = serde_json::from_str(json)?;
+        let minimal = MinimalTestSpec::deserialize(&value)?;
+        if let Some(impl_ver) = impl_version
+            && let Some(test_ver) = &minimal.flint_version
+            && parse_version(test_ver) > parse_version(impl_ver)
+        {
+            return Ok(TestSpecLoadResult::Skipped {
+                reason: format!(
+                    "requires flint_version {}, implementation supports {}",
+                    test_ver, impl_ver
+                ),
+                spec: minimal,
+            });
+        }
+        let spec = TestSpec::deserialize(value)?;
+        Ok(TestSpecLoadResult::Loaded(spec))
     }
 
     pub fn max_tick(&self) -> u32 {
