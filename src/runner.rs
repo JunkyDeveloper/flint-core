@@ -218,10 +218,7 @@ impl<A: FlintAdapter> TestRunner<A> {
                             let expected = inv.is.clone().unwrap_or(Item::empty());
                             if !item_matches(&actual, &expected) {
                                 return ActionOutcome::AssertFailed(AssertFailure::new_item(
-                                    _tick,
-                                    &expected,
-                                    &actual,
-                                    inv.slot,
+                                    _tick, &expected, &actual, inv.slot,
                                 ));
                             }
                         }

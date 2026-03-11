@@ -4,7 +4,7 @@
 //! to provide the actual block and player operations.
 
 use crate::Block;
-use crate::test_spec::{BlockFace, Item, PlayerSlot};
+use crate::test_spec::{BlockFace, GameMode, Item, PlayerSlot};
 
 /// Position in world coordinates [x, y, z]
 pub type BlockPos = [i32; 3];
@@ -75,4 +75,7 @@ pub trait FlintPlayer: Send + Sync {
     ///
     /// This tests the server's actual interaction logic.
     fn use_item_on(&mut self, pos: BlockPos, face: &BlockFace);
+
+    /// Set the game mode of the player (creative, survival, etc.)
+    fn set_game_mode(&mut self, mode: GameMode);
 }

@@ -104,6 +104,14 @@ impl Display for PlayerSlot {
     }
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum GameMode {
+    Survival,
+    Creative,
+    Adventure,
+    Spectator,
+}
+
 /// Player configuration for advanced mode (initial inventory setup)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -114,10 +122,17 @@ pub struct PlayerConfig {
     /// Initially selected hotbar slot (1-9), defaults to 1
     #[serde(default = "default_selected_hotbar")]
     pub selected_hotbar: u8,
+    /// The gametype of the player, defaults to "creative"
+    #[serde(default = "default_game_type")]
+    pub game_mode: GameMode,
 }
 
 fn default_selected_hotbar() -> u8 {
     1
+}
+
+fn default_game_type() -> GameMode {
+    GameMode::Creative
 }
 
 /// An item that can be held or placed in a slot.
@@ -449,7 +464,9 @@ where
     match value {
         None => Ok(None),
         Some(serde_json::Value::String(s)) if s == "None" || s == "empty" => Ok(None),
-        Some(v) => Item::deserialize(v).map(Some).map_err(serde::de::Error::custom),
+        Some(v) => Item::deserialize(v)
+            .map(Some)
+            .map_err(serde::de::Error::custom),
     }
 }
 
