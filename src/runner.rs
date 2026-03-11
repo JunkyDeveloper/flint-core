@@ -208,17 +208,19 @@ impl<A: FlintAdapter> TestRunner<A> {
                         }
                         AssertType::Inventory(inv) => {
                             let p = player.get_or_insert_with(|| world.create_player());
-                            if let Some(actual) = p.get_slot(inv.slot) {
-                                if !item_matches(&actual, &inv.is) {
-                                    return ActionOutcome::AssertFailed(AssertFailure::new_item(
-                                        _tick, &inv.is, &actual, inv.slot,
-                                    ));
-                                }
+                            let data: Vec<String>;
+                            if let Some(item) = inv.is.clone() {
+                                data = item.data.keys().cloned().collect();
                             } else {
-                                return ActionOutcome::AssertFailed(AssertFailure::new_slot(
+                                data = vec![]
+                            }
+                            let actual = p.get_slot(inv.slot, data).unwrap_or(Item::empty());
+                            if !item_matches(&actual, &inv.is) {
+                                return ActionOutcome::AssertFailed(AssertFailure::new_item(
                                     _tick,
+                                    &inv.is.clone().unwrap_or(Item::empty()),
+                                    &actual,
                                     inv.slot,
-                                    PlayerSlot::None,
                                 ));
                             }
                         }
@@ -309,8 +311,9 @@ fn block_matches(actual: &Block, expected: &Block) -> bool {
     true
 }
 
-fn item_matches(actual: &Item, expected: &Item) -> bool {
+fn item_matches(actual: &Item, expected: &Option<Item>) -> bool {
     // Check item ID
+    let expected = expected.clone().unwrap_or(Item::new("minecraft:air"));
     check_id(&actual.id, &expected.id);
     if actual.count != expected.count {
         return false;

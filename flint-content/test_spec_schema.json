@@ -198,6 +198,43 @@
       },
       "additionalProperties": false
     },
+    "Item": {
+      "type": "object",
+      "required": ["id"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Item identifier, e.g., 'minecraft:honeycomb'"
+        },
+        "count": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 64,
+          "default": 1,
+          "description": "Stack count"
+        }
+      },
+      "additionalProperties": { "type": "string" },
+      "description": "Item with optional data fields (flattened)"
+    },
+    "InventoryCheck": {
+      "type": "object",
+      "required": ["slot"],
+      "properties": {
+        "slot": {
+          "$ref": "#/$defs/PlayerSlot",
+          "description": "Inventory slot to check"
+        },
+        "is": {
+          "oneOf": [
+            { "$ref": "#/$defs/Item" },
+            { "type": "string", "enum": ["None", "empty"], "description": "Explicit empty slot marker" }
+          ],
+          "description": "Expected item in the slot, or 'None'/'empty' for an empty slot"
+        }
+      },
+      "additionalProperties": false
+    },
     "BlockCheck": {
       "type": "object",
       "required": ["pos", "is"],
@@ -328,8 +365,13 @@
               "do": true,
               "checks": {
                 "type": "array",
-                "items": { "$ref": "#/$defs/BlockCheck" },
-                "description": "List of block checks to perform"
+                "items": {
+                  "oneOf": [
+                    { "$ref": "#/$defs/BlockCheck" },
+                    { "$ref": "#/$defs/InventoryCheck" }
+                  ]
+                },
+                "description": "List of checks to perform"
               }
             },
             "required": ["checks"],

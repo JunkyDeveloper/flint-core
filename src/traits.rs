@@ -63,7 +63,7 @@ pub trait FlintPlayer: Send + Sync {
     fn set_slot(&mut self, slot: PlayerSlot, item: Option<&Item>);
 
     /// Get item from a slot (None if empty)
-    fn get_slot(&self, slot: PlayerSlot) -> Option<Item>;
+    fn get_slot(&self, slot: PlayerSlot, requested_data: Vec<String>) -> Option<Item>;
 
     /// Select which hotbar slot is active (1-9)
     fn select_hotbar(&mut self, slot: u8);

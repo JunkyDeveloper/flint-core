@@ -128,7 +128,8 @@ pub struct Item {
     /// Stack count (default 1)
     #[serde(default = "default_count")]
     pub count: u8,
-    #[serde(flatten, skip_serializing_if = "FxHashMap::is_empty")]
+    #[serde(default)]
+    #[serde(flatten)]
     pub data: FxHashMap<String, String>,
 }
 
@@ -436,10 +437,24 @@ pub enum TestSpecLoadResult {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InventoryCheck {
     pub slot: PlayerSlot,
-    pub is: Item,
+    #[serde(default, deserialize_with = "deserialize_item_or_none")]
+    pub is: Option<Item>,
+}
+
+fn deserialize_item_or_none<'de, D>(deserializer: D) -> Result<Option<Item>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let value: Option<serde_json::Value> = Option::deserialize(deserializer)?;
+    match value {
+        None => Ok(None),
+        Some(serde_json::Value::String(s)) if s == "None" || s == "empty" => Ok(None),
+        Some(v) => Item::deserialize(v).map(Some).map_err(serde::de::Error::custom),
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
 pub enum AssertType {
     Block(BlockCheck),
     Inventory(InventoryCheck),
