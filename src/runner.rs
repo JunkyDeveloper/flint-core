@@ -215,10 +215,11 @@ impl<A: FlintAdapter> TestRunner<A> {
                                 data = vec![]
                             }
                             let actual = p.get_slot(inv.slot, data).unwrap_or(Item::empty());
-                            if !item_matches(&actual, &inv.is) {
+                            let expected = inv.is.clone().unwrap_or(Item::empty());
+                            if !item_matches(&actual, &expected) {
                                 return ActionOutcome::AssertFailed(AssertFailure::new_item(
                                     _tick,
-                                    &inv.is.clone().unwrap_or(Item::empty()),
+                                    &expected,
                                     &actual,
                                     inv.slot,
                                 ));
@@ -311,9 +312,8 @@ fn block_matches(actual: &Block, expected: &Block) -> bool {
     true
 }
 
-fn item_matches(actual: &Item, expected: &Option<Item>) -> bool {
+fn item_matches(actual: &Item, expected: &Item) -> bool {
     // Check item ID
-    let expected = expected.clone().unwrap_or(Item::new("minecraft:air"));
     check_id(&actual.id, &expected.id);
     if actual.count != expected.count {
         return false;
