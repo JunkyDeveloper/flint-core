@@ -97,6 +97,11 @@
       },
       "additionalProperties": false
     },
+    "GameMode": {
+      "type": "string",
+      "enum": ["Survival", "Creative", "Adventure", "Spectator"],
+      "description": "Player game mode"
+    },
     "PlayerSlot": {
       "type": "string",
       "enum": [
@@ -141,6 +146,11 @@
           "maximum": 9,
           "default": 1,
           "description": "Initially selected hotbar slot (1-9)"
+        },
+        "game_mode": {
+          "$ref": "#/$defs/GameMode",
+          "default": "Creative",
+          "description": "The gametype of the player, defaults to creative"
         }
       },
       "additionalProperties": false
